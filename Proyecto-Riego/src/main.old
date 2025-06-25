@@ -1,0 +1,69 @@
+#include <Arduino.h>
+#include "WebServerRiego.h"
+#include <WiFi.h>
+#include "SensorHumedad.h"
+#include "ControlRiego.h"
+#include "IndicadoresLED.h"
+#include "BotonManual.h"
+#include "PantallaEstado.h"
+
+#define SENSOR_PIN     6
+#define RELE_PIN       16
+#define VERDE_LED      4
+#define AZUL_LED       5
+#define ROJO_LED       46
+#define AMARILLO_LED   7
+#define BOTON_PIN      10
+
+SensorHumedad sensor(SENSOR_PIN);
+ControlRiego riego(RELE_PIN);
+IndicadoresLED leds(VERDE_LED, AZUL_LED, ROJO_LED, AMARILLO_LED);
+BotonManual boton(BOTON_PIN);
+PantallaEstado pantalla;
+
+bool enRiegoManual = false;
+unsigned long tiempoInicioRiegoManual = 0;
+const unsigned long duracionManual = 5000; // 5 segundos
+
+void setup() {
+  Serial.begin(115200);
+  leds.estadoNormal();
+  pantalla.iniciar();
+}
+
+void loop() {
+  int humedad = sensor.leerHumedad();
+  pantalla.mostrarHumedad(humedad);
+  pantalla.mostrarModo(riego.esAutomatico());
+  pantalla.mostrarRiego(riego.riegoActivo());
+
+  if (boton.fuePresionado()) {
+    Serial.println("Botón presionado: Riego manual activado.");
+    riego.activarRiego();
+    leds.riegoManual();
+    enRiegoManual = true;
+    tiempoInicioRiegoManual = millis();
+  }
+
+  if (enRiegoManual) {
+    if (millis() - tiempoInicioRiegoManual >= duracionManual) {
+      riego.detenerRiego();
+      leds.estadoNormal();
+      enRiegoManual = false;
+      Serial.println("Riego manual finalizado.");
+    }
+    return; // saltamos el riego automático
+  }
+
+  Serial.println("Humedad: " + String(humedad));
+
+  if (humedad < 2000) {
+    riego.activarRiego();
+    leds.riegoAutomatico();
+  } else {
+    riego.detenerRiego();
+    leds.estadoNormal();
+  }
+
+  delay(500);
+}
